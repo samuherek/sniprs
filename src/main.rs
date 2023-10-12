@@ -1,5 +1,16 @@
 mod gpt_query;
 
+use std::io::{self, stdout, Write};
+
+use crossterm::{
+    cursor,
+    execute,
+    queue, 
+    terminal::{self, ClearType},
+    style::{self, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    event::{self, KeyCode, KeyEvent, KeyModifiers, Event},
+    ExecutableCommand
+};
 use clap::{Parser, Subcommand};
 use std::io::Read;
 use anyhow::{Result, Context};
@@ -49,16 +60,90 @@ fn add_command() -> Result<String>{
     return Ok("".to_string());
 }
 
+fn list_command() -> anyhow::Result<()> {
+    let lines = vec![
+        "Line 1", "Line 2", "Line 3", "Line 4",
+        "Line 5", "Line 6", "Line 7", "Line 8",
+    ];
+
+    let mut selected_idx = 0;
+
+    let mut stdout = stdout();
+
+    execute!(stdout, terminal::EnterAlternateScreen)?;
+    terminal::enable_raw_mode()?;
+
+    loop {
+        queue!(
+            stdout, 
+            style::ResetColor, 
+            terminal::Clear(ClearType::All), 
+            cursor::Hide, 
+            cursor::MoveTo(0,0)
+            )?;
+
+        for (index, line) in lines.iter().enumerate() {
+            let line = if index == selected_idx {
+                format!("> {}", line)
+            } else {
+                format!("  {}", line)
+            };
+
+            queue!(stdout, style::Print(line))?;
+            execute!(stdout, cursor::MoveToNextLine(1))?;
+        }
+
+        stdout.flush()?;
+
+        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+            match code {
+                KeyCode::Char('k') => {
+                    selected_idx = selected_idx.saturating_sub(1);
+                },
+                KeyCode::Char('j') => {
+                    selected_idx = (selected_idx + 1).min(lines.len() - 1);
+                },
+                KeyCode::Enter => {
+                    execute!(
+                        stdout, 
+                        cursor::SetCursorStyle::DefaultUserShape
+                        ).unwrap();
+                    break;
+                },
+                KeyCode::Char('q') | KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => {
+                    execute!(
+                        stdout, 
+                        cursor::SetCursorStyle::DefaultUserShape
+                        ).unwrap();
+                    break;
+                },
+                _ => {}
+            }
+        }
+    }
+
+    execute!(
+        stdout,
+        style::ResetColor,
+        cursor::Show,
+        terminal::LeaveAlternateScreen
+        )?;
+
+    terminal::disable_raw_mode()?;
+
+    return Ok(());
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
         Some(Commands::Add {}) => {
             println!("add stuff");
-            add_command().expect("Should exec the add command");
+            // add_command().expect("Should exec the add command");
         },
         Some(Commands::List) => {
-            println!("list stuff");
+            list_command().unwrap(); 
         },
         None => {
             println!("None");
