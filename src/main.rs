@@ -148,7 +148,7 @@ fn main() {
             list_command().unwrap(); 
         },
         None => {
-            println!("None");
+            list_command().unwrap(); 
         }
     }
 }
