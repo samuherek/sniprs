@@ -35,36 +35,24 @@ enum Commands {
 }
 
 
-fn add_command() -> Result<String>{
-    let history =  dirs::home_dir().expect("Can not find home dir").join(".zsh_history");
-    println!("{:?}", history);
+/// Read the .zsh_history and get the last x lines from it.
+fn get_history(line_count: usize) -> anyhow::Result<Vec<String>> {
+    let history_path = dirs::home_dir().expect("can not find home dir").join(".zsh_history");
+    let data: Vec<String> = String::from_utf8_lossy(&fs::read(&history_path)?)
+        .lines()
+        .rev()
+        .take(line_count)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .map(|l| l.to_string())
+        .collect();
 
-    // let mut file_content = Vec::new();
-    // let mut file = File::open(&file_name).expect("Unable to open file");
-    // file.read_to_end(&mut file_content).expect("Unable to read");
-    // file_content
-
-    let file = fs::read(&history).with_context(|| format!("Unable to read {:?}", &history))?;
-    let content = String::from_utf8_lossy(&file);
-    let command = content.lines().last().unwrap_or("");
-
-    println!("{:?}", command);
-
-    let res = query_gpt();
-    println!("QUERY GPT:: {:?}", res);
-
-    // let data = fs::read_to_string(&history).expect("can read to string");
-    // let command = data.lines().last().unwrap_or("");
-    // println!("{}", command);
-
-    return Ok("".to_string());
+    return Ok(data);
 }
 
 fn list_command() -> anyhow::Result<()> {
-    let lines = vec![
-        "Line 1", "Line 2", "Line 3", "Line 4",
-        "Line 5", "Line 6", "Line 7", "Line 8",
-    ];
+    let lines = get_history(10)?;
 
     let mut selected_idx = 0;
 
@@ -95,7 +83,7 @@ fn list_command() -> anyhow::Result<()> {
 
         stdout.flush()?;
 
-        if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+        if let Event::Key(KeyEvent { code,  .. }) = event::read()? {
             match code {
                 KeyCode::Char('k') => {
                     selected_idx = selected_idx.saturating_sub(1);
@@ -110,7 +98,7 @@ fn list_command() -> anyhow::Result<()> {
                         ).unwrap();
                     break;
                 },
-                KeyCode::Char('q') | KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => {
+                KeyCode::Char('q') => {
                     execute!(
                         stdout, 
                         cursor::SetCursorStyle::DefaultUserShape
@@ -130,6 +118,8 @@ fn list_command() -> anyhow::Result<()> {
         )?;
 
     terminal::disable_raw_mode()?;
+
+    println!("{}", lines[selected_idx]);
 
     return Ok(());
 }
