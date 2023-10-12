@@ -135,7 +135,7 @@ impl<'a> HistoryView {
 
         queue!(
             renderer.stdout, 
-            style::Print(self.search_query.clone())
+            style::Print(format!("/{}", self.search_query.clone()))
             )?;
 
         execute!(
@@ -176,6 +176,23 @@ impl<'a> HistoryView {
             renderer.stdout.flush()?;
 
 
+            if self.in_search_mode {
+                if let Event::Key(KeyEvent {code, ..}) = event::read()? {
+                    match code {
+                        KeyCode::Esc => {
+                            self.in_search_mode = false;
+                            self.search_query = String::from("");
+                        }
+                        KeyCode::Backspace => {
+                            self.search_query.pop();
+                        },
+                        KeyCode::Char(c) => {
+                            self.search_query.push(c);
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
             if let Event::Key(KeyEvent { code,  .. }) = event::read()? {
                 match code {
                     KeyCode::Char('k') => {
@@ -184,6 +201,9 @@ impl<'a> HistoryView {
                     KeyCode::Char('j') => {
                         self.move_selected_index(MoveDirection::Down);
                     },
+                    KeyCode::Char('/') => {
+                        self.in_search_mode = true;
+                    }
                     KeyCode::Enter => {
                         //execute!(
                          //   stdout, 
@@ -200,6 +220,7 @@ impl<'a> HistoryView {
                     },
                     _ => {}
                 }
+            }
             }
         }
 
@@ -283,6 +304,7 @@ fn list_command() -> anyhow::Result<()> {
         }
 
         stdout.flush()?;
+
 
         if let Event::Key(KeyEvent { code,  .. }) = event::read()? {
             match code {
