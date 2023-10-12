@@ -1,25 +1,26 @@
 mod gpt_query;
 
-use std::io::{self, stdout, Write};
+use std::io::{ stdout, Write};
 
+use std::path::PathBuf;
 use crossterm::{
     cursor,
     execute,
     queue, 
     terminal::{self, ClearType},
-    style::{self, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style,
     event::{self, KeyCode, KeyEvent, KeyModifiers, Event},
     ExecutableCommand
 };
 use clap::{Parser, Subcommand};
-use std::io::Read;
-use anyhow::{Result, Context};
+use std::env;
+use anyhow::anyhow;
 use dirs;
 use std::fs;
 use gpt_query::query_gpt;
 
 #[derive(Parser)]
-#[command(name = "quickref")]
+#[command(name = "qvick")]
 #[command(author = "Sam Uherek <samuherekbiz@gmail.com>")]
 #[command(about = "Quick reference to commands", long_about = None)]
 #[command(version)]
@@ -34,10 +35,21 @@ enum Commands {
     List
 }
 
+fn get_history_path() -> anyhow::Result<PathBuf> {
+    let shell_path = env::var("SHELL")?;
+    let shell_name = shell_path.rsplit('/').next().unwrap_or("");
+    let home_dir = dirs::home_dir().unwrap_or(PathBuf::from("~/"));
+
+    return match shell_name {
+        "bash" => Ok(home_dir.join(".bash_history")),
+        "zsh" => Ok(home_dir.join(".zsh_history")),
+        _ => Err(anyhow!("We could not find your shell.")),
+    }
+}
 
 /// Read the .zsh_history and get the last x lines from it.
 fn get_history(line_count: usize) -> anyhow::Result<Vec<String>> {
-    let history_path = dirs::home_dir().expect("can not find home dir").join(".zsh_history");
+    let history_path = get_history_path()?;
     let data: Vec<String> = String::from_utf8_lossy(&fs::read(&history_path)?)
         .lines()
         .rev()
