@@ -53,11 +53,8 @@ impl<'a> HistoryView {
 
         } else {
             self.visible_commands = self.all_commands.iter()
-                .take(50)
                 .filter_map(|item| {
-                    let res = matcher.fuzzy_match(item, &self.search_query);
-                    println!("{:?}", res);
-                    return res.map(|score| (item, score));
+                    return matcher.fuzzy_match(item, &self.search_query).map(|score| (item, score));
                 })
                 //.filter(|&(_, score)| score > 20)  // Use a score threshold to filter results.
                 .map(|(item, _)| item.clone())
