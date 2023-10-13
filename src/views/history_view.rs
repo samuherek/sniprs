@@ -3,6 +3,8 @@ use crossterm::{execute, queue, style, cursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use super::super::Renderer;
 use super::super::history::get_history;
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 
 enum MoveDirection {
     Up,
@@ -10,6 +12,7 @@ enum MoveDirection {
 }
 
 type HistoryCommands = Vec<String>;
+
 
 pub struct HistoryView {
     in_search_mode: bool,
@@ -39,11 +42,28 @@ impl<'a> HistoryView {
     }
 
     fn assign_query_commands(&mut self) -> anyhow::Result<()>{
-        self.visible_commands = self.all_commands
-            .iter()
-            .take(self.visible_limit)
-            .cloned()
-            .collect();
+        let matcher = SkimMatcherV2::default();
+
+        if self.search_query.trim().is_empty() {
+            self.visible_commands = self.all_commands
+                .iter()
+                .take(self.visible_limit)
+                .cloned()
+                .collect();
+
+        } else {
+            self.visible_commands = self.all_commands.iter()
+                .take(50)
+                .filter_map(|item| {
+                    let res = matcher.fuzzy_match(item, &self.search_query);
+                    println!("{:?}", res);
+                    return res.map(|score| (item, score));
+                })
+                //.filter(|&(_, score)| score > 20)  // Use a score threshold to filter results.
+                .map(|(item, _)| item.clone())
+                .take(self.visible_limit)
+                .collect();
+        }
 
         return Ok(());
     }
@@ -94,9 +114,14 @@ impl<'a> HistoryView {
                         }
                         KeyCode::Backspace => {
                             self.search_query.pop();
+                            self.assign_query_commands()?;
                         },
                         KeyCode::Char(c) => {
                             self.search_query.push(c);
+                            self.assign_query_commands()?;
+                        },
+                        KeyCode::Enter => {
+                            self.in_search_mode = false;
                         }
                         _ => {}
                     }
@@ -112,6 +137,7 @@ impl<'a> HistoryView {
                     },
                     KeyCode::Char('/') => {
                         self.in_search_mode = true;
+                        self.search_query = String::from("");
                     }
                     KeyCode::Enter => {
                         //execute!(
