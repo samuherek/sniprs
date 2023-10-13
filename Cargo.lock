@@ -184,21 +184,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
-name = "comrs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "crossterm",
- "dirs",
- "dotenv",
- "fuzzy-matcher",
- "reqwest",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -986,6 +971,21 @@ name = "smallvec"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
+
+[[package]]
+name = "sniprs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "crossterm",
+ "dirs",
+ "dotenv",
+ "fuzzy-matcher",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "socket2"

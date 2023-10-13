@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 
-const CONFIG_DIR: &str = ".comrs";
+const CONFIG_DIR: &str = ".sniprs";
 
 fn get_config_path() -> PathBuf {
     return dirs::home_dir().expect("Could not determine home dir").join(CONFIG_DIR);
