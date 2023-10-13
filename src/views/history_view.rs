@@ -15,6 +15,8 @@ pub struct HistoryView {
     in_search_mode: bool,
     search_query: String,
     visible_commands: HistoryCommands, 
+    all_commands: HistoryCommands,
+    visible_limit: usize,
     selected_index: usize,
 }
 
@@ -24,12 +26,25 @@ impl<'a> HistoryView {
             in_search_mode: false,
             search_query: String::from(""),
             visible_commands: Vec::new(),
+            all_commands: Vec::new(),
+            visible_limit: 10,
             selected_index: 0,
         };
     }
 
     pub fn load_history(&mut self) -> anyhow::Result<()> {
-        self.visible_commands = get_history(10)?;
+        self.all_commands = get_history()?;
+        self.assign_query_commands()?;
+        return Ok(());
+    }
+
+    fn assign_query_commands(&mut self) -> anyhow::Result<()>{
+        self.visible_commands = self.all_commands
+            .iter()
+            .take(self.visible_limit)
+            .cloned()
+            .collect();
+
         return Ok(());
     }
 
@@ -41,44 +56,6 @@ impl<'a> HistoryView {
         return self.visible_commands[self.selected_index].clone();
     } 
 
-    fn render_list(&self, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
-        for (index, line) in self.visible_commands.iter().enumerate() {
-            let line = if index == self.selected_index {
-                format!("> {}", line)
-            } else {
-                format!("  {}", line)
-            };
-
-            queue!(renderer.stdout, style::Print(line))?;
-            execute!(renderer.stdout, cursor::MoveToNextLine(1))?;
-        }
-
-        return Ok(());
-    }
-
-    fn render_query(&self, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
-        let (_, rows) = crossterm::terminal::size()?;
-
-        execute!(
-            renderer.stdout,
-            cursor::MoveTo(0, rows - 1),
-            cursor::SavePosition
-            )?;
-
-        queue!(
-            renderer.stdout, 
-            style::Print(format!("/{}", self.search_query.clone()))
-            )?;
-
-        execute!(
-            renderer.stdout, 
-            cursor::RestorePosition
-            )?;
-
-        renderer.stdout.flush()?;
-
-        return Ok(());        
-    }
 
     fn move_selected_index(&mut self, direction: MoveDirection) {
         if self.visible_commands.len() == 0 {
@@ -99,10 +76,10 @@ impl<'a> HistoryView {
         loop {
             renderer.clear_screen()?;
 
-            self.render_list(renderer)?;
+            render_list(&self, renderer)?;
 
             if self.in_search_mode {
-                self.render_query(renderer)?;
+                render_query(&self, renderer)?;
             }
 
             renderer.stdout.flush()?;
@@ -158,4 +135,44 @@ impl<'a> HistoryView {
 
         return Ok(());
     }
+}
+
+
+fn render_list<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
+    for (index, line) in view.visible_commands.iter().enumerate() {
+        let line = if index == view.selected_index {
+            format!("> {}", line)
+        } else {
+            format!("  {}", line)
+        };
+
+        queue!(renderer.stdout, style::Print(line))?;
+        execute!(renderer.stdout, cursor::MoveToNextLine(1))?;
+    }
+
+    return Ok(());
+}
+
+fn render_query<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
+    let (_, rows) = crossterm::terminal::size()?;
+
+    execute!(
+        renderer.stdout,
+        cursor::MoveTo(0, rows - 1),
+        cursor::SavePosition
+        )?;
+
+    queue!(
+        renderer.stdout, 
+        style::Print(format!("/{}", view.search_query.clone()))
+        )?;
+
+    execute!(
+        renderer.stdout, 
+        cursor::RestorePosition
+        )?;
+
+    renderer.stdout.flush()?;
+
+    return Ok(());        
 }

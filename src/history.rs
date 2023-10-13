@@ -15,15 +15,13 @@ fn get_history_path() -> anyhow::Result<PathBuf> {
     }
 }
 
-/// Read the .zsh_history and get the last x lines from it.
-pub fn get_history(line_count: usize) -> anyhow::Result<Vec<String>> {
+
+/// Read the shell history.
+pub fn get_history() -> anyhow::Result<Vec<String>> {
     let history_path = get_history_path()?;
-    let data: Vec<String> = String::from_utf8_lossy(&fs::read(&history_path)?)
+
+    let data: Vec<String> = String::from_utf8_lossy(&fs::read(history_path)?)
         .lines()
-        .rev()
-        .take(line_count)
-        .collect::<Vec<_>>()
-        .into_iter()
         .rev()
         .map(|l| l.to_string())
         .collect();
