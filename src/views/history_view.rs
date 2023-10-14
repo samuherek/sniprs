@@ -1,21 +1,30 @@
 use std::io::Write;
 use crossterm::{execute, queue, style, cursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crate::gpt_query;
+
 use super::super::Renderer;
 use super::super::history::get_history;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use super::super::config;
 
 enum MoveDirection {
     Up,
     Down
 }
 
+enum ViewState {
+    List,
+    Search,
+    ApiLoading,
+    Saved,
+}
+
 type HistoryCommands = Vec<String>;
 
-
 pub struct HistoryView {
-    in_search_mode: bool,
+    view: ViewState,
     search_query: String,
     visible_commands: HistoryCommands, 
     all_commands: HistoryCommands,
@@ -26,7 +35,7 @@ pub struct HistoryView {
 impl<'a> HistoryView {
     pub fn new() -> Self {
         return HistoryView {
-            in_search_mode: false,
+            view: ViewState::List,
             search_query: String::from(""),
             visible_commands: Vec::new(),
             all_commands: Vec::new(),
@@ -73,7 +82,6 @@ impl<'a> HistoryView {
         return self.visible_commands[self.selected_index].clone();
     } 
 
-
     fn move_selected_index(&mut self, direction: MoveDirection) {
         if self.visible_commands.len() == 0 {
             return;
@@ -89,77 +97,136 @@ impl<'a> HistoryView {
         }
     }
 
+    fn save_command(&mut self) -> anyhow::Result<()> {
+        let command = self.get_selected();
+
+        config::init_dotfolder()?;
+        config::save_command(&command)?;
+
+        gpt_query::query_gpt(&command)?;
+
+        self.view = ViewState::Saved;
+
+        return Ok(());
+    }
+
     pub fn render(&mut self, renderer: &mut Renderer<'a>) -> anyhow::Result<()>{
+        
         loop {
             renderer.clear_screen()?;
+            render_view(&self.view, renderer)?;
 
-            render_list(&self, renderer)?;
+            match self.view {
+                ViewState::List => {
+                    render_list(&self, renderer)?;
 
-            if self.in_search_mode {
-                render_query(&self, renderer)?;
+                    if let Event::Key(KeyEvent { code,  .. }) = event::read()? {
+                        match code {
+                            KeyCode::Char('k') => {
+                                self.move_selected_index(MoveDirection::Up);
+                            },
+                            KeyCode::Char('j') => {
+                                self.move_selected_index(MoveDirection::Down);
+                            },
+                            KeyCode::Char('/') => {
+                                self.selected_index = 0;
+                                self.view = ViewState::Search;
+                                self.search_query = String::from("");
+                            }
+                            KeyCode::Enter => {
+                                self.view = ViewState::ApiLoading;
+                                self.save_command()?;
+                            },
+                            KeyCode::Char('q') => {
+                                break;
+                            },
+                            _ => {}
+                        }
+                    }
+                },
+                ViewState::Search => {
+                    render_list(&self, renderer)?;
+                    render_query(&self, renderer)?;
+
+                    if let Event::Key(KeyEvent {code, ..}) = event::read()? {
+                        match code {
+                            KeyCode::Esc => {
+                                self.view = ViewState::List;
+                                self.search_query = String::from("");
+                            }
+                            KeyCode::Backspace => {
+                                self.search_query.pop();
+                                self.assign_query_commands()?;
+                            },
+                            KeyCode::Char(c) => {
+                                self.search_query.push(c);
+                                self.assign_query_commands()?;
+                            },
+                            KeyCode::Enter => {
+                                self.view = ViewState::List;
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                ViewState::ApiLoading => {
+                    if let Event::Key(KeyEvent {code, ..}) = event::read()? {
+                        match code {
+                            KeyCode::Char('q') => {
+                                break;
+                            },
+                            _ => {}
+                        }
+                    }
+
+                    render_api_loading(&self, renderer)?;
+                },
+                ViewState::Saved => {
+                    if let Event::Key(KeyEvent {code, ..}) = event::read()? {
+                        match code {
+                            KeyCode::Char('q') => {
+                                break;
+                            },
+                            _ => {}
+                        }
+                    }
+                    render_done(&self, renderer)?;
+                }
             }
+
+            render_view(&self.view, renderer)?;
 
             renderer.stdout.flush()?;
-
-
-            if self.in_search_mode {
-                if let Event::Key(KeyEvent {code, ..}) = event::read()? {
-                    match code {
-                        KeyCode::Esc => {
-                            self.in_search_mode = false;
-                            self.search_query = String::from("");
-                        }
-                        KeyCode::Backspace => {
-                            self.search_query.pop();
-                            self.assign_query_commands()?;
-                        },
-                        KeyCode::Char(c) => {
-                            self.search_query.push(c);
-                            self.assign_query_commands()?;
-                        },
-                        KeyCode::Enter => {
-                            self.in_search_mode = false;
-                        }
-                        _ => {}
-                    }
-                }
-            } else {
-            if let Event::Key(KeyEvent { code,  .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('k') => {
-                        self.move_selected_index(MoveDirection::Up);
-                    },
-                    KeyCode::Char('j') => {
-                        self.move_selected_index(MoveDirection::Down);
-                    },
-                    KeyCode::Char('/') => {
-                        self.in_search_mode = true;
-                        self.search_query = String::from("");
-                    }
-                    KeyCode::Enter => {
-                        //execute!(
-                         //   stdout, 
-                         //   cursor::SetCursorStyle::DefaultUserShape
-                         //   ).unwrap();
-                        break;
-                    },
-                    KeyCode::Char('q') => {
-                        // execute!(
-                         //   stdout, 
-                         //   cursor::SetCursorStyle::DefaultUserShape
-                         //   ).unwrap();
-                        break;
-                    },
-                    _ => {}
-                }
-            }
-            }
         }
 
         return Ok(());
     }
 }
 
+fn render_done<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
+   execute!(
+        renderer.stdout,
+        cursor::MoveTo(0,0),
+        style::Print(format!(
+                "Saved {} to {}", 
+                view.search_query.clone(),
+                view.get_selected(),
+                )
+            )
+       )?; 
+
+   return Ok(());
+}
+
+fn render_api_loading<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
+   execute!(
+        renderer.stdout,
+        cursor::MoveTo(0,0),
+        style::Print(format!("Fetching chatGPT description for: {}", view.search_query.clone()))
+       )?; 
+
+   return Ok(());
+}
 
 fn render_list<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
     for (index, line) in view.visible_commands.iter().enumerate() {
@@ -174,6 +241,35 @@ fn render_list<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::R
     }
 
     return Ok(());
+}
+
+fn render_view<'a>(view: &ViewState, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
+    let (_, rows) = crossterm::terminal::size()?;
+
+    execute!(
+        renderer.stdout,
+        cursor::MoveTo(0, 0),
+        )?;
+
+    queue!(
+        renderer.stdout, 
+        style::Print(format!("{}", match view {
+            ViewState::List => "List" ,
+            ViewState::Search => "Search" ,
+            ViewState::ApiLoading => "Api loading" ,
+            ViewState::Saved => "Saved" ,
+            }))
+        )?;
+
+
+    execute!(
+        renderer.stdout, 
+        cursor::MoveTo(0,1)
+        )?;
+
+    //renderer.stdout.flush()?;
+
+    return Ok(());        
 }
 
 fn render_query<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::Result<()> {
@@ -195,7 +291,7 @@ fn render_query<'a>(view: &HistoryView, renderer: &mut Renderer<'a>) -> anyhow::
         cursor::RestorePosition
         )?;
 
-    renderer.stdout.flush()?;
+    //renderer.stdout.flush()?;
 
     return Ok(());        
 }

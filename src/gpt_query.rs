@@ -59,9 +59,8 @@ struct GPTResponse {
 }
 
 
-pub fn query_gpt() {
+pub fn query_gpt(command: &str) -> anyhow::Result<String> {
     dotenv().ok(); 
-
 
     let api_key = env::var("OPEN_AI_KEY").expect("Open ai key must be available");
     let bearer_auth = format!("Bearer {}", api_key);
@@ -76,7 +75,7 @@ pub fn query_gpt() {
                          ----
                          ... Provide a list of 5 tags in a comma separated list that represent this command for easier query when searching for this information.
                          ----", 
-                         "nvim .");
+                         command);
 
 
     let content = serde_json::to_string(&GPTRequest {
@@ -103,17 +102,17 @@ pub fn query_gpt() {
     match res {
         Ok(response) => {
             if response.status().is_success() {
-                let mess = response.text().unwrap();
-                println!("res::: {:?}", mess);
-                let j: GPTResponse = serde_json::from_str(&mess).unwrap();
-                println!("res json:: {:?}", j);
+                let mess = response.text()?;
+                let j: GPTResponse = serde_json::from_str(&mess)?;
+                let content = &j.choices[0].message.content;
+                return Ok(content.clone());
             } else {
-                let mess = response.text().unwrap();
-                println!("res err::: {:?}", mess)
+                let mess = response.text()?;
+                anyhow::bail!(mess);
             }
         },
         Err(e) => {
-            println!("ERROR::::::::::: {:?}", e);
+            anyhow::bail!(e);
         }
     }
 }

@@ -3,6 +3,7 @@ mod renderer;
 mod history;
 mod cli;
 mod views;
+mod config;
 
 use crate::renderer::Renderer;
 use crate::views::history_view::HistoryView;
@@ -40,11 +41,13 @@ fn main() -> anyhow::Result<()>{
                 return Ok(());
             }
 
+            // It renders the alternative screen to keep the old terminal view
             renderer.enter_screen()?;
+            // Interactive render that will be in a loop until it's exited
             history.render(&mut renderer)?;
+            // Cleanup and restoring the original termianl view
             renderer.leave_screen()?;
 
-            println!("{}", history.get_selected());
         }
     }
 
